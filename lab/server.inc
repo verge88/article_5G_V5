@@ -9,6 +9,7 @@
 static unsigned long long lab_requests, lab_responses, lab_errors, lab_service_us;
 static unsigned long long lab_prev_requests, lab_prev_responses, lab_prev_errors, lab_prev_us;
 static ogs_time_t lab_begin;
+static unsigned long long lab_last_seq;
 
 static void lab_hex(const uint8_t *in, char *out)
 {
@@ -70,7 +71,8 @@ static int lab_kie_request(ogs_sbi_stream_t *stream)
     ogs_hmac_sha256(key, 32, (uint8_t *)payload, strlen(payload), digest, 32);
     lab_hex(digest, expected);
     for (i = 0; i < 64; i++) mismatch |= (expected[i] ^ auth[i]);
-    if (mismatch) goto forbidden;
+    if (mismatch || !seq[0] || strtoull(seq, NULL, 10) <= lab_last_seq) goto forbidden;
+    lab_last_seq = strtoull(seq, NULL, 10);
 
     now = ogs_time_now();
     n = lab_requests; r = lab_responses; e = lab_errors; us = lab_service_us;

@@ -42,7 +42,7 @@ def episode(root, out, split, scenario, number, rng, config, poll=True):
     gap = rng.randrange(15, 90) if "heldout" not in scenario else rng.randrange(100, 180)
     env.update(LAB_KIE_KEY=master, LAB_CONTROL_DIR=str(control.resolve()),
                LAB_OBSERVER_DIR=str(directory.resolve()), LAB_ROUNDS=str(config["rounds"]),
-               LAB_GAP_MS=str(gap))
+               LAB_GAP_MS=str(gap), LAB_WORKLOAD_TIMING=str(directory / "workload_us.txt"))
     workload = "guti-test" if "heldout" in scenario else "simple-test"
     cmd = [str(root / "build/tests/registration/registration"), "-e", "warn", workload]
     target = rng.choice(["SMF", "UDM", "UDR", "PCF"])
@@ -100,12 +100,16 @@ def episode(root, out, split, scenario, number, rng, config, poll=True):
                         duration_seconds=time.monotonic()-started,
                         returncode=process.returncode, timed_out=timed_out,
                         success_reports=len(reports), failed_probes=len(failures))
+        timing = directory / "workload_us.txt"
+        if timing.exists():
+            manifest["workload_seconds"] = int(timing.read_text()) / 1e6
         write_json(directory / "manifest.json", manifest)
         with (directory / "kie.jsonl").open("w") as f:
             for row in reports:
                 f.write(json.dumps(row) + "\n")
         write_json(directory / "probe_failures.json", failures)
     if process.returncode != 0:
+        print((directory / "open5gs.log").read_text(errors="replace")[-12000:], flush=True)
         raise RuntimeError(f"Real Open5GS workload failed: {directory / 'open5gs.log'}")
     content = (directory / "open5gs.log").read_text(errors="replace")
     if "SUCCESS" not in content or "FAILED" in content:

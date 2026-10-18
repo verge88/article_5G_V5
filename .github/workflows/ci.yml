@@ -33,6 +33,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -r requirements.txt
+      - run: python -m pytest -q
       - run: bash lab/install_dependencies.sh
       - name: Build pinned real Open5GS with instrumentation
         run: bash lab/build.sh
@@ -41,6 +42,13 @@ jobs:
           OMP_NUM_THREADS: '1'
           OPENBLAS_NUM_THREADS: '1'
         run: python -m experiment.collect --config configs/smoke.json --seed 11 --output results/seed-11
+      - name: Evaluate models without test-set tuning
+        env:
+          OMP_NUM_THREADS: '1'
+          OPENBLAS_NUM_THREADS: '1'
+        run: python -m experiment.evaluate results/seed-11
+      - run: python -m experiment.report --input results --output results/report --config configs/smoke.json
+      - run: cat results/report/report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Preserve evidence even when validation fails
         if: always()
         uses: actions/upload-artifact@v4

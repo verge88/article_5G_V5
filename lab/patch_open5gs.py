@@ -30,7 +30,9 @@ def patch(root):
     client = root / "lib/sbi/client.c"
     text = client.read_text()
     anchor = "static connection_t *connection_add("
-    text = replace_once(text, anchor, (here / "client.inc").read_text() + "\n" + anchor) if text.count(anchor) == 1 else text.replace(anchor, (here / "client.inc").read_text() + "\n" + anchor, 1)
+    if text.count(anchor) != 2:
+        raise RuntimeError("Client declaration/definition anchors changed")
+    text = text.replace(anchor, (here / "client.inc").read_text() + "\n" + anchor, 1)
     text = replace_once(text, "            res = resource->data.result;",
                         "            lab_observe(easy, url, res_status);\n            res = resource->data.result;")
     client.write_text(text)
@@ -40,9 +42,17 @@ def patch(root):
                         """    {
         int round, rounds = getenv("LAB_ROUNDS") ? atoi(getenv("LAB_ROUNDS")) : 1;
         int gap = getenv("LAB_GAP_MS") ? atoi(getenv("LAB_GAP_MS")) : 0;
+        ogs_time_t lab_start = ogs_time_now();
         for (round = 0; round < rounds; round++) {
             for (i = 0; alltests[i].func; i++) suite = alltests[i].func(suite);
             if (gap > 0) ogs_msleep(gap);
+        }
+        if (getenv("LAB_WORKLOAD_TIMING")) {
+            FILE *timing = fopen(getenv("LAB_WORKLOAD_TIMING"), "w");
+            if (timing) {
+                fprintf(timing, "%lld", (long long)(ogs_time_now() - lab_start));
+                fclose(timing);
+            }
         }
     }""")
     main.write_text(text)
