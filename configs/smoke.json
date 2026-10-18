@@ -1,0 +1,13 @@
+{
+  "profile": "smoke",
+  "seeds": [11],
+  "train_episodes": 3,
+  "calibration_episodes": 3,
+  "test_repeats": 1,
+  "rounds": 12,
+  "poll_seconds": 0.25,
+  "target_fpr": 0.05,
+  "bootstrap_replicates": 200,
+  "scenarios": ["normal", "benign_delay", "count_underreport", "latency_underreport", "stale_report", "two_nf_reports", "heldout_normal", "heldout_latency"],
+  "overhead_pairs": 1
+}

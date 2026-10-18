@@ -1,0 +1,54 @@
+name: Open5GS integration
+on:
+  push:
+    paths:
+      - 'lab/**'
+      - 'experiment/**'
+      - 'tests/**'
+      - 'requirements.txt'
+      - '.github/workflows/ci.yml'
+      - 'configs/**'
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-core:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    services:
+      mongodb:
+        image: mongo:7.0.16
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: bash lab/install_dependencies.sh
+      - name: Build pinned real Open5GS with instrumentation
+        run: bash lab/build.sh
+      - name: Collect independent real-core episodes
+        env:
+          OMP_NUM_THREADS: '1'
+          OPENBLAS_NUM_THREADS: '1'
+        run: python -m experiment.collect --config configs/smoke.json --seed 11 --output results/seed-11
+      - name: Preserve evidence even when validation fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-evidence
+          path: |
+            results/
+            .lab/open5gs-instrumentation.patch
+            .lab/open5gs/build/meson-logs/
+          if-no-files-found: error
+          retention-days: 30
