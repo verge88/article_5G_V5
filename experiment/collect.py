@@ -29,7 +29,7 @@ def set_mode(directory, role, mode):
     temp.replace(target)
 
 
-def episode(root, out, split, scenario, number, rng, config, poll=True):
+def episode(root, out, split, scenario, number, rng, config, poll=True, target_override=None):
     eid = f"{split}-{number:03d}-{scenario}"
     directory = out / "raw" / eid
     directory.mkdir(parents=True)
@@ -46,6 +46,10 @@ def episode(root, out, split, scenario, number, rng, config, poll=True):
     workload = "guti-test" if "heldout" in scenario else "simple-test"
     cmd = [str(root / "build/tests/registration/registration"), "-e", "warn", workload]
     target = rng.choice(["SMF", "UDM", "UDR", "PCF"])
+    if target_override is not None:
+        if target_override not in ("SMF", "UDM", "UDR", "PCF"):
+            raise ValueError("Invalid regression target")
+        target = target_override
     modes = {"count_underreport": 1, "latency_underreport": 2,
              "heldout_latency": 2, "stale_report": 3, "benign_delay": 4}
     assigned = {target: modes.get(scenario, 0)}

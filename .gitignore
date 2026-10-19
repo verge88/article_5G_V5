@@ -1,6 +1,9 @@
 .venv/
 .lab/
 results/
+regression/
+smoke/
+publication/
 __pycache__/
 .pytest_cache/
 *.pyc

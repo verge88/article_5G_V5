@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: full-experiment-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 env:
   OMP_NUM_THREADS: '1'
   OPENBLAS_NUM_THREADS: '1'
@@ -38,6 +38,8 @@ jobs:
         run: python -c 'import json,os; c=json.load(open("configs/full.json")); print("seeds="+json.dumps(c["seeds"]),file=open(os.environ["GITHUB_OUTPUT"],"a"))'
       - run: bash lab/install_dependencies.sh
       - run: bash lab/build.sh
+      - name: Check delayed service stability on every candidate NF
+        run: python -m lab.regression
       - name: Gate the study on an actual end-to-end smoke experiment
         run: |
           python -m experiment.collect --config configs/smoke.json --seed 11 --output smoke/seed-11
@@ -55,6 +57,7 @@ jobs:
           name: full-study-preflight
           path: |
             smoke/
+            regression/
             .lab/open5gs-instrumentation.patch
             .lab/open5gs/build/meson-logs/
           retention-days: 30

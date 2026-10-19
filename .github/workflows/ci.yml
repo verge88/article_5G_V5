@@ -37,6 +37,8 @@ jobs:
       - run: bash lab/install_dependencies.sh
       - name: Build pinned real Open5GS with instrumentation
         run: bash lab/build.sh
+      - name: Check delayed service stability on every candidate NF
+        run: python -m lab.regression
       - name: Collect independent real-core episodes
         env:
           OMP_NUM_THREADS: '1'
@@ -56,6 +58,7 @@ jobs:
           name: integration-evidence
           path: |
             results/
+            regression/
             .lab/open5gs-instrumentation.patch
             .lab/open5gs/build/meson-logs/
           if-no-files-found: error

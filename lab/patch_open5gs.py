@@ -20,12 +20,14 @@ def patch(root):
     server = root / "lib/sbi/nghttp2-server.c"
     text = server.read_text()
     text = replace_once(text, "    bool                    memory_overflow;",
-                        "    bool                    memory_overflow;\n    ogs_time_t lab_started;")
+                        "    bool                    memory_overflow;\n    ogs_time_t lab_started;\n    void *lab_pending;")
     text = replace_once(text, "} ogs_sbi_stream_t;", "} ogs_sbi_stream_t;\n" + (here / "server.inc").read_text())
     text = replace_once(text, "    nvlen = 3; /* :status && server && date */",
                         "    lab_record_response(stream, response->status);\n    nvlen = 3; /* :status && server && date */")
     text = replace_once(text, "            if (server->cb(request,",
                         "            if (lab_kie_request(stream)) return 0;\n\n            if (server->cb(request,")
+    text = replace_once(text, "    ogs_list_remove(&sbi_sess->stream_list, stream);",
+                        "    lab_cancel_reply(stream);\n    ogs_list_remove(&sbi_sess->stream_list, stream);")
     server.write_text(text)
     client = root / "lib/sbi/client.c"
     text = client.read_text()
@@ -56,6 +58,14 @@ def patch(root):
         }
     }""")
     main.write_text(text)
+    # The upstream fast client otherwise releases a session before pending SBI
+    # state updates finish when a benign service delay is introduced. Apply the
+    # same settling periods to every simple-test workload, including controls.
+    simple = root / "tests/registration/simple-test.c"
+    text = simple.read_text()
+    for anchor in ["    /* Send UEContextReleaseRequest */", "    /* Send De-registration request */"]:
+        text = replace_once(text, anchor, "    ogs_msleep(50); /* Laboratory workload settling time */\n" + anchor)
+    simple.write_text(text)
 
 
 if __name__ == "__main__":

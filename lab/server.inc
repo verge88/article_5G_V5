@@ -11,6 +11,49 @@ static unsigned long long lab_prev_requests, lab_prev_responses, lab_prev_errors
 static ogs_time_t lab_begin;
 static unsigned long long lab_last_seq;
 
+typedef struct {
+    ogs_timer_t *timer;
+    ogs_pool_id_t stream_id;
+    ogs_sbi_response_t *response;
+} lab_pending_t;
+
+static void lab_reply_ready(void *data)
+{
+    lab_pending_t *pending = data;
+    ogs_sbi_stream_t *stream = stream_find_by_id(pending->stream_id);
+    ogs_timer_delete(pending->timer);
+    if (stream) {
+        stream->lab_pending = NULL;
+        server_send_response(stream, pending->response);
+    } else {
+        ogs_sbi_response_free(pending->response);
+    }
+    ogs_free(pending);
+}
+
+static void lab_cancel_reply(ogs_sbi_stream_t *stream)
+{
+    lab_pending_t *pending = stream->lab_pending;
+    if (!pending) return;
+    stream->lab_pending = NULL;
+    ogs_timer_delete(pending->timer);
+    ogs_sbi_response_free(pending->response);
+    ogs_free(pending);
+}
+
+static void lab_send_reply(ogs_sbi_stream_t *stream, ogs_sbi_response_t *response)
+{
+    lab_pending_t *pending = ogs_calloc(1, sizeof(*pending));
+    ogs_assert(pending);
+    pending->stream_id = stream->id;
+    pending->response = response;
+    pending->timer = ogs_timer_add(ogs_app()->timer_mgr, lab_reply_ready, pending);
+    ogs_assert(pending->timer);
+    stream->lab_pending = pending;
+    /* Never re-enter nghttp2 send while its receive callback is active. */
+    ogs_timer_start(pending->timer, ogs_time_from_msec(1));
+}
+
 static void lab_hex(const uint8_t *in, char *out)
 {
     int i;
@@ -101,12 +144,12 @@ static int lab_kie_request(ogs_sbi_stream_t *stream)
     response->http.content = ogs_strdup(body);
     response->http.content_length = strlen(body);
     ogs_sbi_header_set(response->http.headers, "content-type", "application/json");
-    server_send_response(stream, response);
+    lab_send_reply(stream, response);
     return 1;
 forbidden:
     response = ogs_sbi_response_new();
     response->status = 403;
-    server_send_response(stream, response);
+    lab_send_reply(stream, response);
     return 1;
 }
 
