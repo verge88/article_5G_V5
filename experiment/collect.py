@@ -118,6 +118,7 @@ def episode(root, out, split, scenario, number, rng, config, poll=True):
     if not observed.exists() or not observed.stat().st_size:
         raise RuntimeError(f"No independent SCP observations: {eid}")
     if poll and (len(reports) < 12 or not all(any(r["role"] == nf for r in reports) for nf in NFS)):
+        print(json.dumps(failures[:12]), flush=True)
         raise RuntimeError(f"Insufficient authenticated KIE coverage: {eid}")
     print(json.dumps(manifest), flush=True)
     time.sleep(0.3)

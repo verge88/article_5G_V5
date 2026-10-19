@@ -14,7 +14,7 @@ NFS = {"SMF": "127.0.0.4", "AMF": "127.0.0.5", "AUSF": "127.0.0.11",
 
 
 def key_for(master, ip):
-    return hmac.digest(master.encode(), ip.encode(), "sha256")
+    return hmac.digest(hashlib.sha256(master.encode()).digest(), ip.encode(), "sha256")
 
 
 def decode_response(body, master, ip, seq, nonce):

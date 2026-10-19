@@ -7,4 +7,4 @@ meson setup .lab/open5gs/build .lab/open5gs --buildtype=release
 # Build runtime-loaded Diameter extensions as well as linked dependencies.
 ninja -C .lab/open5gs/build -j2
 git -C .lab/open5gs diff > .lab/open5gs-instrumentation.patch
-tar -czf .lab/open5gs-build.tar.gz .lab/open5gs/build .lab/open5gs-instrumentation.patch
+tar --exclude='.git' -czf .lab/open5gs-build.tar.gz .lab/open5gs .lab/open5gs-instrumentation.patch

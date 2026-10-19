@@ -38,7 +38,7 @@ static int lab_kie_request(ogs_sbi_stream_t *stream)
     char ip[OGS_ADDRSTRLEN], payload[1024], expected[65], mac[65];
     char body[1400];
     const char *seq, *nonce, *auth;
-    uint8_t key[32], digest[32];
+    uint8_t root_key[32], key[32], digest[32];
     ogs_time_t now;
     unsigned long long n, r, e, us;
     ogs_sbi_response_t *response;
@@ -65,7 +65,9 @@ static int lab_kie_request(ogs_sbi_stream_t *stream)
             strlen(nonce) != 32 || strlen(auth) != 64) goto forbidden;
     for (i = 0; seq[i]; i++) if (!isdigit((unsigned char)seq[i])) goto forbidden;
     for (i = 0; nonce[i]; i++) if (!isxdigit((unsigned char)nonce[i])) goto forbidden;
-    ogs_hmac_sha256((const uint8_t *)master, strlen(master),
+    /* Keep the cryptographic API input at its native 32-byte key size. */
+    ogs_sha256((const uint8_t *)master, strlen(master), root_key);
+    ogs_hmac_sha256(root_key, 32,
             (const uint8_t *)ip, strlen(ip), key, 32);
     snprintf(payload, sizeof(payload), "%s|%s|%s", ip, seq, nonce);
     ogs_hmac_sha256(key, 32, (uint8_t *)payload, strlen(payload), digest, 32);

@@ -1,0 +1,133 @@
+name: Full Open5GS experiment
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/experiment.yml']
+permissions:
+  contents: read
+concurrency:
+  group: full-experiment-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  OMP_NUM_THREADS: '1'
+  OPENBLAS_NUM_THREADS: '1'
+  MKL_NUM_THREADS: '1'
+  MPLBACKEND: Agg
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    outputs:
+      seeds: ${{ steps.plan.outputs.seeds }}
+    services:
+      mongodb:
+        image: mongo:7.0.16
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+      - id: plan
+        run: python -c 'import json,os; c=json.load(open("configs/full.json")); print("seeds="+json.dumps(c["seeds"]),file=open(os.environ["GITHUB_OUTPUT"],"a"))'
+      - run: bash lab/install_dependencies.sh
+      - run: bash lab/build.sh
+      - name: Gate the study on an actual end-to-end smoke experiment
+        run: |
+          python -m experiment.collect --config configs/smoke.json --seed 11 --output smoke/seed-11
+          python -m experiment.evaluate smoke/seed-11
+          python -m experiment.report --input smoke --output smoke/report --config configs/smoke.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinned-open5gs-build
+          path: .lab/open5gs-build.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-study-preflight
+          path: |
+            smoke/
+            .lab/open5gs-instrumentation.patch
+            .lab/open5gs/build/meson-logs/
+          retention-days: 30
+          if-no-files-found: error
+  study:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        seed: ${{ fromJSON(needs.prepare.outputs.seeds) }}
+    services:
+      mongodb:
+        image: mongo:7.0.16
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: bash lab/install_dependencies.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: pinned-open5gs-build
+          path: .lab
+      - run: tar -xzf .lab/open5gs-build.tar.gz
+      - name: Collect 48 independent core episodes
+        run: python -m experiment.collect --config configs/full.json --seed ${{ matrix.seed }} --output results/seed-${{ matrix.seed }}
+      - name: Train on normal data and evaluate all fixed comparisons
+        run: python -m experiment.evaluate results/seed-${{ matrix.seed }}
+      - name: Record resolved environment
+        if: always()
+        run: |
+          mkdir -p results/seed-${{ matrix.seed }}
+          pip freeze > results/seed-${{ matrix.seed }}/python-environment.txt
+          dpkg-query -W > results/seed-${{ matrix.seed }}/system-environment.txt
+      - name: Preserve raw evidence, models and failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-core-seed-${{ matrix.seed }}
+          path: results/seed-${{ matrix.seed }}
+          retention-days: 90
+          if-no-files-found: error
+  report:
+    needs: [prepare, study]
+    if: ${{ always() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: real-core-seed-*
+          path: results
+      - name: Reject missing seeds and generate the study report
+        run: python -m experiment.report --input results --output publication --config configs/full.json
+      - run: cat publication/report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: publication-report
+          path: publication/
+          retention-days: 90
+          if-no-files-found: error
