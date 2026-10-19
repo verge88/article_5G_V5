@@ -3,6 +3,7 @@
 [Полный эксперимент](https://github.com/verge88/article_5G_V5/actions/workflows/experiment.yml)
 · [Проверка интеграции](https://github.com/verge88/article_5G_V5/actions/workflows/ci.yml)
 · [Протокол и ограничения](docs/protocol.md)
+· [Границы научной новизны](docs/novelty-boundary.md)
 
 ## Запуск в GitHub Actions
 
